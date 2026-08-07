@@ -86,12 +86,19 @@ EOF
     fi
 }
 
-
 snake() {
     local rows cols max_x max_y
-    rows=$(tput lines); cols=$(tput cols)
-    max_x=$((cols - 5))
-    max_y=$((rows - 2))
+    local resized=0
+
+    # Dynamiczne przeliczanie wymiarów ekranu
+    update_dimensions() {
+        rows=$(tput lines); cols=$(tput cols)
+        max_x=$((cols - 5))
+        max_y=$((rows - 2))
+        (( max_x < 5 )) && max_x=5
+        (( max_y < 2 )) && max_y=2
+    }
+    update_dimensions
 
     local CHAR_H="-" CHAR_V="|" CHAR_SLASH="/" CHAR_BACK="\\"
     local CHAR_TL=$'\u250c' CHAR_TR=$'\u2510' CHAR_BL=$'\u2514' CHAR_BR=$'\u2518'
@@ -111,21 +118,36 @@ snake() {
 
     tput civis
     clear
-    trap 'tput cnorm; clear; trap - INT; return 0' INT
+
+    # Przechwytywanie zmiany rozmiaru terminala (SIGWINCH) i przerwania (SIGINT)
+    trap 'resized=1' WINCH
+    trap 'tput cnorm; clear; trap - INT WINCH; return 0' INT
 
     echo -e "\033[36mGenerating an advanced dynamic snake... Press Ctrl+C to stop.\033[0m"
     sleep 1
     clear
 
-
     while true; do
+        # Obsługa zmiany rozmiaru okna terminala
+        if (( resized )); then
+            resized=0
+            update_dimensions
+            clear
+            # Dopasowanie segmentów węża do nowych granic po zmniejszeniu
+            for ((i=0; i<LEN; i++)); do
+                (( sx[i] > max_x )) && sx[i]=$max_x
+                (( sy[i] > max_y )) && sy[i]=$max_y
+                (( sx[i] < 1 )) && sx[i]=1
+                (( sy[i] < 1 )) && sy[i]=1
+            done
+        fi
+
         old_dirx=$dirx
         old_diry=$diry
 
         if (( in_loop )); then
             loop_steps=$((loop_steps - 1))
             loop_angle=$(awk -v a="$loop_angle" -v d="$loop_dir" 'BEGIN{printf "%.6f", a + d*0.45}')
-            dirx=$(awk -v a="$loop_angle" 'BEGIN{c=cos(a)*2; printf "%d", (c>0)-(c<0)*(c<-0.5) + (c>=0.5)-(c<=-0.5)}')
             dirx=$(awk -v a="$loop_angle" 'BEGIN{v=cos(a)*2; r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
             diry=$(awk -v a="$loop_angle" 'BEGIN{v=sin(a); r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
 
@@ -159,6 +181,7 @@ snake() {
         local new_x=$((sx[0] + dirx))
         local new_y=$((sy[0] + diry))
 
+        # Odbicie od krawędzi okna
         if (( new_x < 1 || new_x > max_x || new_y < 1 || new_y > max_y )); then
             in_loop=0; loop_steps=0
             while true; do
@@ -195,11 +218,13 @@ snake() {
             fi
         fi
         schar[0]="$next_char"
+        
+        # Wymazanie końcówki ogona
         local tail_idx=$((LEN - 1))
-        printf "\033[%d;%dH \033[K" "${sy[tail_idx]}" "${sx[tail_idx]}" > /dev/tty 2>/dev/null
         tput cup "${sy[tail_idx]}" "${sx[tail_idx]}"
         printf " "
 
+        # Przesunięcie tablicy pozycji
         for ((i=LEN-1; i>0; i--)); do
             sx[i]=${sx[i-1]}
             sy[i]=${sy[i-1]}
@@ -208,6 +233,7 @@ snake() {
         sx[0]=$new_x
         sy[0]=$new_y
 
+        # Rysowanie węża na ekranie
         for ((i=0; i<LEN; i++)); do
             tput cup "${sy[i]}" "${sx[i]}"
             if (( i == 0 )); then
@@ -344,6 +370,7 @@ snake-info() {
     tput cup "$final_y" 0
     echo
 }
+
 snake-matrix() {
     local cols rows w h
     cols=$(tput cols); rows=$(tput lines)
@@ -508,7 +535,6 @@ snake-weather() {
     echo -e "\n\033[90m[Tip] To change your saved city, type: snake-weather -Reset\033[0m"
 }
 
-
 snake-help() {
     clear
 
@@ -541,13 +567,13 @@ snake-help() {
 
     tput cup 9 0
     echo "=================================================================="
-    echo -e "\033[33m  COMMAND             |  DESCRIPTION\033[0m"
+    echo -e "\033[33m  COMMAND             | DESCRIPTION\033[0m"
     echo "=================================================================="
-    printf "\033[36m  snake               \033[0m|  Starts the animated retro arcade snake game.\n"
-    printf "\033[36m  snake-info          \033[0m|  Displays detailed system specs with custom logos.\n"
-    printf "\033[36m  snake-matrix        \033[0m|  Triggers the animated Matrix digital rain effect.\n"
-    printf "\033[36m  snake-weather       \033[0m|  Fetches accurate current weather and temperature.\n"
-    printf "\033[36m  snake-weather -Reset\033[0m|  Resets the saved city configuration.\n"
+    printf "\033[36m  snake               \033[0m| Starts the animated retro arcade snake game.\n"
+    printf "\033[36m  snake-info          \033[0m| Displays detailed system specs with custom logos.\n"
+    printf "\033[36m  snake-matrix        \033[0m| Triggers the animated Matrix digital rain effect.\n"
+    printf "\033[36m  snake-weather       \033[0m| Fetches accurate current weather and temperature.\n"
+    printf "\033[36m  snake-weather -Reset\033[0m| Resets the saved city configuration.\n"
     echo "=================================================================="
     echo -e "\033[90mType any command above to start! Press Ctrl+C to exit loops.\n\033[0m"
 }
