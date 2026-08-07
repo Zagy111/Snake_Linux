@@ -90,13 +90,13 @@ snake() {
     local rows cols max_x max_y
     local resized=0
 
-    # Dynamiczne przeliczanie wymiarów ekranu
     update_dimensions() {
-        rows=$(tput lines); cols=$(tput cols)
-        max_x=$((cols - 5))
+        rows=$(tput lines)
+        cols=$(tput cols)
+        max_x=$((cols - 2))
         max_y=$((rows - 2))
         (( max_x < 5 )) && max_x=5
-        (( max_y < 2 )) && max_y=2
+        (( max_y < 5 )) && max_y=5
     }
     update_dimensions
 
@@ -105,9 +105,14 @@ snake() {
 
     local LEN=15
     local -a sx sy schar
+    
+    # Start na środku ekranu
+    local start_x=$((cols / 2))
+    local start_y=$((rows / 2))
+    
     for ((i=0; i<LEN; i++)); do
-        sx[i]=$((40 - i))
-        sy[i]=12
+        sx[i]=$((start_x - i))
+        sy[i]=$start_y
         schar[i]="$CHAR_H"
     done
 
@@ -119,27 +124,14 @@ snake() {
     tput civis
     clear
 
-    # Przechwytywanie zmiany rozmiaru terminala (SIGWINCH) i przerwania (SIGINT)
     trap 'resized=1' WINCH
     trap 'tput cnorm; clear; trap - INT WINCH; return 0' INT
 
-    echo -e "\033[36mGenerating an advanced dynamic snake... Press Ctrl+C to stop.\033[0m"
-    sleep 1
-    clear
-
     while true; do
-        # Obsługa zmiany rozmiaru okna terminala
         if (( resized )); then
             resized=0
             update_dimensions
             clear
-            # Dopasowanie segmentów węża do nowych granic po zmniejszeniu
-            for ((i=0; i<LEN; i++)); do
-                (( sx[i] > max_x )) && sx[i]=$max_x
-                (( sy[i] > max_y )) && sy[i]=$max_y
-                (( sx[i] < 1 )) && sx[i]=1
-                (( sy[i] < 1 )) && sy[i]=1
-            done
         fi
 
         old_dirx=$dirx
@@ -147,14 +139,16 @@ snake() {
 
         if (( in_loop )); then
             loop_steps=$((loop_steps - 1))
-            loop_angle=$(awk -v a="$loop_angle" -v d="$loop_dir" 'BEGIN{printf "%.6f", a + d*0.45}')
-            dirx=$(awk -v a="$loop_angle" 'BEGIN{v=cos(a)*2; r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
-            diry=$(awk -v a="$loop_angle" 'BEGIN{v=sin(a); r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
+            loop_angle=$(awk -v a="$loop_angle" -v d="$loop_dir" 'BEGIN{printf "%.4f", a + d*0.45}')
+            dirx=$(awk -v a="$loop_angle" 'BEGIN{v=cos(a)*2; print (v>=0.5)?1:((v<=-0.5)?-1:0)}')
+            diry=$(awk -v a="$loop_angle" 'BEGIN{v=sin(a); print (v>=0.5)?1:((v<=-0.5)?-1:0)}')
 
             if (( loop_steps <= 0 )); then
                 in_loop=0
-                (( dirx > 0 )) && dirx=1 || { (( dirx < 0 )) && dirx=-1 || dirx=0; }
-                (( diry > 0 )) && diry=1 || { (( diry < 0 )) && diry=-1 || diry=0; }
+                (( dirx > 0 )) && dirx=1
+                (( dirx < 0 )) && dirx=-1
+                (( diry > 0 )) && diry=1
+                (( diry < 0 )) && diry=-1
             fi
         else
             local roll=$(( (RANDOM % 100) + 1 ))
@@ -162,67 +156,56 @@ snake() {
                 in_loop=1
                 loop_steps=$(( (RANDOM % 4) + 14 ))
                 loop_dir=$(( (RANDOM % 2) == 0 ? 1 : -1 ))
-                loop_angle=$(awk -v y="$diry" -v x="$dirx" 'BEGIN{printf "%.6f", atan2(y, x/2)}')
-            elif (( roll <= 20 )); then
-                local new_dx new_dy
-                while true; do
-                    new_dx=$(( (RANDOM % 3) - 1 ))
-                    new_dy=$(( (RANDOM % 3) - 1 ))
-                    (( new_dx == 0 && new_dy == 0 )) && continue
-                    (( new_dx == -dirx && new_dx != 0 )) && continue
-                    (( new_dy == -diry && new_dy != 0 )) && continue
-                    break
-                done
-                dirx=$new_dx
-                diry=$new_dy
+                loop_angle=$(awk -v y="$diry" -v x="$dirx" 'BEGIN{printf "%.4f", atan2(y, x/2)}')
+            elif (( roll <= 25 )); then
+                local new_dx=$(( (RANDOM % 3) - 1 ))
+                local new_dy=$(( (RANDOM % 3) - 1 ))
+                if (( !(new_dx == 0 && new_dy == 0) )); then
+                    unless_backwards=$(( new_dx != -old_dirx || new_dy != -old_diry ))
+                    if (( unless_backwards )); then
+                        dirx=$new_dx
+                        diry=$new_dy
+                    fi
+                fi
             fi
+        fi
+
+        # Zabezpieczenie przed brakiem ruchu
+        if (( dirx == 0 && diry == 0 )); then
+            dirx=1; diry=0
         fi
 
         local new_x=$((sx[0] + dirx))
         local new_y=$((sy[0] + diry))
 
-        # Odbicie od krawędzi okna
-        if (( new_x < 1 || new_x > max_x || new_y < 1 || new_y > max_y )); then
+        # Odbicie od krawędzi – bezpieczna zmiana kierunku do wewnątrz ekranu
+        if (( new_x < 2 || new_x > max_x || new_y < 2 || new_y > max_y )); then
             in_loop=0; loop_steps=0
-            while true; do
-                dirx=$(( (RANDOM % 3) - 1 ))
-                diry=$(( (RANDOM % 3) - 1 ))
-                new_x=$((sx[0] + dirx))
-                new_y=$((sy[0] + diry))
-                (( new_x < 1 || new_x > max_x || new_y < 1 || new_y > max_y )) && continue
-                (( dirx == 0 && diry == 0 )) && continue
-                break
-            done
+            dirx=0; diry=0
+            (( new_x < 2 )) && dirx=1
+            (( new_x > max_x )) && dirx=-1
+            (( new_y < 2 )) && diry=1
+            (( new_y > max_y )) && diry=-1
+            new_x=$((sx[0] + dirx))
+            new_y=$((sy[0] + diry))
         fi
 
         local next_char="$CHAR_H"
-        if (( in_loop )); then
-            if (( (dirx > 0 && diry > 0) || (dirx < 0 && diry < 0) )); then next_char="$CHAR_BACK"
-            elif (( (dirx < 0 && diry > 0) || (dirx > 0 && diry < 0) )); then next_char="$CHAR_SLASH"
-            elif (( diry != 0 && dirx == 0 )); then next_char="$CHAR_V"
-            else next_char="$CHAR_H"
-            fi
-        else
-            if (( old_diry == 0 && dirx == 0 && diry > 0 )); then
-                next_char=$([ $old_dirx -gt 0 ] && echo "$CHAR_TR" || echo "$CHAR_TL")
-            elif (( old_diry == 0 && dirx == 0 && diry < 0 )); then
-                next_char=$([ $old_dirx -gt 0 ] && echo "$CHAR_BR" || echo "$CHAR_BL")
-            elif (( old_dirx == 0 && diry == 0 && dirx > 0 )); then
-                next_char=$([ $old_diry -gt 0 ] && echo "$CHAR_BL" || echo "$CHAR_TL")
-            elif (( old_dirx == 0 && diry == 0 && dirx < 0 )); then
-                next_char=$([ $old_diry -gt 0 ] && echo "$CHAR_BR" || echo "$CHAR_TR")
-            elif (( dirx != 0 && diry != 0 )); then
-                if (( (dirx > 0 && diry > 0) || (dirx < 0 && diry < 0) )); then next_char="$CHAR_BACK"; else next_char="$CHAR_SLASH"; fi
-            elif (( dirx != 0 && diry == 0 )); then next_char="$CHAR_H"
-            elif (( dirx == 0 && diry != 0 )); then next_char="$CHAR_V"
-            fi
+        if (( dirx != 0 && diry != 0 )); then
+            if (( (dirx > 0 && diry > 0) || (dirx < 0 && diry < 0) )); then next_char="$CHAR_BACK"; else next_char="$CHAR_SLASH"; fi
+        elif (( dirx != 0 )); then next_char="$CHAR_H"
+        elif (( diry != 0 )); then next_char="$CHAR_V"
         fi
         schar[0]="$next_char"
-        
-        # Wymazanie końcówki ogona
+
+        # Bezpieczne wymazanie najstarszego segmentu
         local tail_idx=$((LEN - 1))
-        tput cup "${sy[tail_idx]}" "${sx[tail_idx]}"
-        printf " "
+        local tx=${sx[tail_idx]}
+        local ty=${sy[tail_idx]}
+        if (( tx >= 0 && ty >= 0 && tx < cols && ty < rows )); then
+            tput cup "$ty" "$tx"
+            printf " "
+        fi
 
         # Przesunięcie tablicy pozycji
         for ((i=LEN-1; i>0; i--)); do
@@ -233,17 +216,21 @@ snake() {
         sx[0]=$new_x
         sy[0]=$new_y
 
-        # Rysowanie węża na ekranie
+        # Rysowanie węża
         for ((i=0; i<LEN; i++)); do
-            tput cup "${sy[i]}" "${sx[i]}"
-            if (( i == 0 )); then
-                printf "\033[33m%%\033[0m"
-            else
-                printf "\033[32m%s\033[0m" "${schar[i]}"
+            local px=${sx[i]}
+            local py=${sy[i]}
+            if (( px >= 0 && py >= 0 && px < cols && py < rows )); then
+                tput cup "$py" "$px"
+                if (( i == 0 )); then
+                    printf "\033[33m%%\033[0m"
+                else
+                    printf "\033[32m%s\033[0m" "${schar[i]}"
+                fi
             fi
         done
 
-        sleep 0.06
+        sleep 0.05
     done
 }
 
