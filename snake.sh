@@ -88,31 +88,20 @@ EOF
 
 snake() {
     local rows cols max_x max_y
-    local resized=0
-
-    update_dimensions() {
-        rows=$(tput lines)
-        cols=$(tput cols)
-        max_x=$((cols - 2))
-        max_y=$((rows - 2))
-        (( max_x < 5 )) && max_x=5
-        (( max_y < 5 )) && max_y=5
-    }
-    update_dimensions
+    local old_cols=0 old_rows=0
 
     local CHAR_H="-" CHAR_V="|" CHAR_SLASH="/" CHAR_BACK="\\"
     local CHAR_TL=$'\u250c' CHAR_TR=$'\u2510' CHAR_BL=$'\u2514' CHAR_BR=$'\u2518'
 
     local LEN=15
     local -a sx sy schar
-    
-    # Start na środku ekranu
-    local start_x=$((cols / 2))
-    local start_y=$((rows / 2))
-    
+
+    # Inicjalizacja pozycji startowej
+    cols=$(tput cols)
+    rows=$(tput lines)
     for ((i=0; i<LEN; i++)); do
-        sx[i]=$((start_x - i))
-        sy[i]=$start_y
+        sx[i]=$((cols / 2 - i))
+        sy[i]=$((rows / 2))
         schar[i]="$CHAR_H"
     done
 
@@ -124,14 +113,31 @@ snake() {
     tput civis
     clear
 
-    trap 'resized=1' WINCH
-    trap 'tput cnorm; clear; trap - INT WINCH; return 0' INT
+    # Przy wyjściu przywracamy kursor i czyścimy ekran
+    trap 'tput cnorm; clear; trap - INT WINCH; return 0' INT WINCH
 
     while true; do
-        if (( resized )); then
-            resized=0
-            update_dimensions
+        # Pobieramy wymiary w KAŻDEJ klatce (rozwiązuje problem lagów SIGWINCH w Hyprlandzie)
+        cols=$(tput cols)
+        rows=$(tput lines)
+
+        # Jeśli wymiar okna się zmienił, od razu czyścimy ekran i dopasowujemy węża
+        if (( cols != old_cols || rows != old_rows )); then
             clear
+            old_cols=$cols
+            old_rows=$rows
+            max_x=$((cols - 2))
+            max_y=$((rows - 2))
+            (( max_x < 2 )) && max_x=2
+            (( max_y < 2 )) && max_y=2
+
+            # Ściągamy wszystkie segmenty do wewnątrz nowego okna
+            for ((i=0; i<LEN; i++)); do
+                (( sx[i] > max_x )) && sx[i]=$max_x
+                (( sy[i] > max_y )) && sy[i]=$max_y
+                (( sx[i] < 1 )) && sx[i]=1
+                (( sy[i] < 1 )) && sy[i]=1
+            done
         fi
 
         old_dirx=$dirx
@@ -161,8 +167,7 @@ snake() {
                 local new_dx=$(( (RANDOM % 3) - 1 ))
                 local new_dy=$(( (RANDOM % 3) - 1 ))
                 if (( !(new_dx == 0 && new_dy == 0) )); then
-                    unless_backwards=$(( new_dx != -old_dirx || new_dy != -old_diry ))
-                    if (( unless_backwards )); then
+                    if (( new_dx != -old_dirx || new_dy != -old_diry )); then
                         dirx=$new_dx
                         diry=$new_dy
                     fi
@@ -170,21 +175,18 @@ snake() {
             fi
         fi
 
-        # Zabezpieczenie przed brakiem ruchu
-        if (( dirx == 0 && diry == 0 )); then
-            dirx=1; diry=0
-        fi
+        (( dirx == 0 && diry == 0 )) && dirx=1
 
         local new_x=$((sx[0] + dirx))
         local new_y=$((sy[0] + diry))
 
-        # Odbicie od krawędzi – bezpieczna zmiana kierunku do wewnątrz ekranu
-        if (( new_x < 2 || new_x > max_x || new_y < 2 || new_y > max_y )); then
+        # Reakcja na krawędzie w miniaturowych lub zmniejszanych oknach
+        if (( new_x < 1 || new_x > max_x || new_y < 1 || new_y > max_y )); then
             in_loop=0; loop_steps=0
             dirx=0; diry=0
-            (( new_x < 2 )) && dirx=1
+            (( new_x < 1 )) && dirx=1
             (( new_x > max_x )) && dirx=-1
-            (( new_y < 2 )) && diry=1
+            (( new_y < 1 )) && diry=1
             (( new_y > max_y )) && diry=-1
             new_x=$((sx[0] + dirx))
             new_y=$((sy[0] + diry))
@@ -198,7 +200,7 @@ snake() {
         fi
         schar[0]="$next_char"
 
-        # Bezpieczne wymazanie najstarszego segmentu
+        # Czyszczenie ostatniego segmentu ogona
         local tail_idx=$((LEN - 1))
         local tx=${sx[tail_idx]}
         local ty=${sy[tail_idx]}
@@ -207,7 +209,7 @@ snake() {
             printf " "
         fi
 
-        # Przesunięcie tablicy pozycji
+        # Przesunięcie pozycji
         for ((i=LEN-1; i>0; i--)); do
             sx[i]=${sx[i-1]}
             sy[i]=${sy[i-1]}
@@ -216,7 +218,7 @@ snake() {
         sx[0]=$new_x
         sy[0]=$new_y
 
-        # Rysowanie węża
+        # Rysowanie z twardym sprawdzeniem granic okna
         for ((i=0; i<LEN; i++)); do
             local px=${sx[i]}
             local py=${sy[i]}
