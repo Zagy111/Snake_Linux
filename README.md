@@ -7,7 +7,7 @@ A Bash port of the [Snake_Windows_PS](https://github.com/Zagy111/Snake_Windows_P
 ## ⚡ One-line install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ligrys111/Snake_Linux/main/snake.sh -o ~/.snake_suite.sh && echo '[ -f ~/.snake_suite.sh ] && source ~/.snake_suite.sh' >> ~/.bashrc && source ~/.bashrc
+curl -fsSL https://raw.githubusercontent.com/Zagy111/Snake_Linux/main/snake.sh -o ~/.snake_suite.sh && echo '[ -f ~/.snake_suite.sh ] && source ~/.snake_suite.sh' >> ~/.bashrc && source ~/.bashrc
 ```
 
 This downloads `snake.sh`, adds it to `~/.bashrc`, and loads the functions into your current session. It will work the same way every time you open a new terminal.
@@ -15,7 +15,7 @@ This downloads `snake.sh`, adds it to `~/.bashrc`, and loads the functions into 
 ### Try it without installing (current session only)
 
 ```bash
-source <(curl -fsSL https://raw.githubusercontent.com/Ligrys111/Snake_Linux/main/snake.sh)
+source <(curl -fsSL https://raw.githubusercontent.com/Zagy111/Snake_Linux/main/snake.sh)
 ```
 
 ## 🚀 Commands
