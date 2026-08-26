@@ -1,6 +1,6 @@
 # 🐍 Snake Suite — Linux Edition
 
-A Bash port of the [Snake_Windows_PS](https://github.com/Ligrys111/Snake_Windows_PS) script collection for Linux.
+A Bash port of the [Snake_Windows_PS](https://github.com/Zagy111/Snake_Windows_PS) script collection for Linux.
 
 > 
 
