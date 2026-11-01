@@ -563,6 +563,7 @@ snake-help() {
     printf "\033[36m  snake-matrix        \033[0m| Triggers the animated Matrix digital rain effect.\n"
     printf "\033[36m  snake-weather       \033[0m| Fetches accurate current weather and temperature.\n"
     printf "\033[36m  snake-weather -Reset\033[0m| Resets the saved city configuration.\n"
+    printf "\033[36m  snake-downloader     \033[0m| Securely downloads YouTube videos via Cobalt API.\n"
     echo "=================================================================="
     echo -e "\033[90mType any command above to start! Press Ctrl+C to exit loops.\n\033[0m"
 }
